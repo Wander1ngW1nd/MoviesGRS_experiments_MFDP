@@ -1,7 +1,7 @@
 import pandas as pd
 
 DATA_PATH = "../data/"
-GROUP_SIZES = [2, 3, 4]
+GROUP_SIZES = range(2, 8)
 RANDOM_SEEDS = range(GROUP_SIZES[0], len(GROUP_SIZES) + GROUP_SIZES[0])
 
 
