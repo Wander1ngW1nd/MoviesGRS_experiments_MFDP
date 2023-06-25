@@ -7,7 +7,7 @@ np.random.seed(42)
 DATA_PATH = "../data/"
 
 
-def get_train_test(groups_list: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
+def fetch_train_test_data(groups_list: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
     train_data: pd.DataFrame = pd.read_parquet(DATA_PATH + "ratings_train.pq")
     test_data: pd.DataFrame = pd.read_parquet(DATA_PATH + "ratings_test.pq")
 
@@ -19,14 +19,14 @@ def get_train_test(groups_list: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
     return train_data, test_data
 
 
-def get_movies() -> pd.DataFrame:
+def load_movies_data() -> pd.DataFrame:
     movies_data: pd.DataFrame = pd.read_parquet(DATA_PATH + "movies_train.pq")
     return movies_data
 
 
-def get_unwatched(train_data: pd.DataFrame) -> pd.DataFrame:
+def compute_users_unwatched_movies(ratings: pd.DataFrame) -> pd.DataFrame:
     top_popular_movies: pd.DataFrame = (
-        train_data.groupby(by="movieId")
+        ratings.groupby(by="movieId")
         .agg({"userId": "nunique"})
         .sort_values(by="userId", ascending=False)
         .rename(columns={"userId": "userCount"})
@@ -35,15 +35,17 @@ def get_unwatched(train_data: pd.DataFrame) -> pd.DataFrame:
 
     movie_ids: np.array = top_popular_movies.movieId.values
 
-    unwatched: pd.DataFrame = train_data.groupby(by="userId").agg({"movieId": list}).reset_index()
-    unwatched["unwatched"] = unwatched.movieId.apply(lambda x: movie_ids[np.isin(movie_ids, x, invert=True)])
+    unwatched_movies: pd.DataFrame = ratings.groupby(by="userId").agg({"movieId": list}).reset_index()
+    unwatched_movies["unwatched"] = unwatched_movies.movieId.apply(
+        lambda x: movie_ids[np.isin(movie_ids, x, invert=True)]
+    )
 
-    unwatched = unwatched[["userId", "unwatched"]]
+    unwatched_movies = unwatched_movies[["userId", "unwatched"]]
 
-    return unwatched
+    return unwatched_movies
 
 
-def get_users_watch_history(data: pd.DataFrame, groups_list: list[str]) -> pd.DataFrame:
+def collect_users_watch_history(data: pd.DataFrame, groups_list: list[str]) -> pd.DataFrame:
     users_watch_history: pd.DataFrame = (
         data.sort_values(by="rating", ascending=False)
         .groupby(by="userId")
@@ -56,13 +58,15 @@ def get_users_watch_history(data: pd.DataFrame, groups_list: list[str]) -> pd.Da
     return users_watch_history
 
 
-def get_recommender_data(groups_list: list[str]) -> pd.DataFrame:
+def collect_unwatched_train_watched_test_movies(groups_list: list[str]) -> pd.DataFrame:
     train_data: pd.DataFrame
     test_data: pd.DataFrame
-    train_data, test_data = get_train_test(groups_list)
+    train_data, test_data = fetch_train_test_data(groups_list)
 
-    unwatched: pd.DataFrame = get_unwatched(train_data)
-    users_watch_history_test: pd.DataFrame = get_users_watch_history(test_data, groups_list)
-    recommender_data: pd.DataFrame = users_watch_history_test.merge(unwatched, on=["userId"])
+    users_unwatched_movies_train: pd.DataFrame = compute_users_unwatched_movies(train_data)
+    users_watch_history_test: pd.DataFrame = collect_users_watch_history(test_data, groups_list)
+    unwatched_train_watched_test_ratings_test: pd.DataFrame = users_watch_history_test.merge(
+        users_unwatched_movies_train, on=["userId"]
+    )
 
-    return recommender_data
+    return unwatched_train_watched_test_ratings_test
